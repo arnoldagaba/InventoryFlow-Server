@@ -40,12 +40,12 @@ export function extractTokenFromHeader(authHeader: string | undefined): null | s
  *
  * @returns Access token as a string
  */
-export function generateAccessToken(userId: string, email: string, roleId: string) {
+export function generateAccessToken(userId: string, email: string, role: string) {
 	try {
 		const now = Math.floor(Date.now() / 1000);
 
 		// Create JWT with minimal payload
-		const jwt = new SignJWT({ email, roleId, type: "access", userId } as JWTPayload)
+		const jwt = new SignJWT({ email, role, type: "access", userId } as JWTPayload)
 			.setProtectedHeader({
 				alg: "HS256",
 			})
@@ -112,7 +112,8 @@ export async function verifyAccessToken(token: string) {
 			email: payload.email as string,
 			exp: payload.exp,
 			iat: payload.iat,
-			userId: payload.userId as string,
+			role: payload.role as string,
+			userId: payload.userId as string
 		};
 	} catch (error) {
 		if (error instanceof Error) {

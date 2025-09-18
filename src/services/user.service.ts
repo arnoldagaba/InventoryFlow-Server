@@ -1,15 +1,14 @@
 import prisma from "#config/prisma.js";
 import { AppError, ConflictError, UnauthorizedError } from "#errors/AppError.js";
-import { User } from "#generated/prisma/client.js";
 import { LoginResponse, UserWithoutPassword } from "#types/auth.types.js";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "#utils/jwt.js";
 import logger from "#utils/logger.js";
 import { hashPassword, needsRehash, verifyPassword } from "#utils/password.js";
 import { LoginDTO, RegisterDTO } from "#validators/auth.validators.js";
 
-import { logLogin, logLogout, logUserCreation } from "./audit.service.js";
+import { logLogin, logUserCreation } from "./audit.service.js";
 
-export class AuthService {
+export class UserService {
 	/**
 	 * Authenticate user with email/username and password.
 	 * This method handles the core authentication logic - finding the user and verifying credentials
@@ -70,7 +69,7 @@ export class AuthService {
 
 		// Update last login and generate auth tokens
 		const [accessToken, refreshToken] = await Promise.all([
-			generateAccessToken(user.id, user.email, user.roleId),
+			generateAccessToken(user.id, user.email, user.role.name),
 			generateRefreshToken(user.id),
 			prisma.user.update({
 				data: { lastLoginAt: new Date() },
@@ -159,9 +158,10 @@ export class AuthService {
 	 * @param userId - Unique user identifier
 	 * @returns Promise<User|null> - User object or null if not found
 	 */
-	async findUserById(userId: string): Promise<null | User> {
+	async findUserById(userId: string) {
 		try {
 			const user = await prisma.user.findFirst({
+				include: { role: true },
 				where: { id: userId, isActive: true },
 			});
 			return user;
@@ -210,9 +210,10 @@ export class AuthService {
 	 * @param identifier - Can be either email or username
 	 * @returns Promise<User | null> - Returns a promise that resolves to the user object if found
 	 */
-	private async findUserByIdentifier(identifier: string): Promise<null | User> {
+	private async findUserByIdentifier(identifier: string) {
 		try {
 			const user = await prisma.user.findFirst({
+				include: { role: true },
 				where: {
 					isActive: true,
 					OR: [{ email: identifier }, { username: identifier }],
@@ -225,3 +226,5 @@ export class AuthService {
 		}
 	}
 }
+
+export const userService = new UserService();

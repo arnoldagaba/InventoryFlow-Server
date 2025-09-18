@@ -1,5 +1,5 @@
 import { errorHandler, notFoundHandler } from "#middleware/error.middleware.js";
-import { httpLogger } from "#middleware/HttpLogger.middleware.js";
+import { httpLogger } from "#middleware/request.middleware.js";
 import appRoutes from "#routes/index.js";
 import { securityConfig } from "#types/auth.types.js";
 import cookieParser from "cookie-parser";
