@@ -1,0 +1,195 @@
+import prisma from "#config/prisma.js";
+import { AppError, ConflictError, UnauthorizedError } from "#errors/AppError.js";
+import { User } from "#generated/prisma/client.js";
+import { LoginResponse, UserWithoutPassword } from "#types/auth.types.js";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "#utils/jwt.js";
+import logger from "#utils/logger.js";
+import { hashPassword, needsRehash, verifyPassword } from "#utils/password.js";
+import { LoginDTO, RegisterDTO } from "#validators/auth.validators.js";
+
+export class AuthService {
+	/**
+	 * Authenticate user with email/username and password.
+	 * This method handles the core authentication logic - finding the user and verifying credentials
+	 *
+	 * @param identifier - Can be either email or username
+	 * @param password - Plain text password provided by user
+	 *
+	 * @returns Promise<LoginResponse> - Returns a promise that resolves to the authentication response with tokens
+	 * @throws Error if authentication fails for any reason
+	 */
+	async authenticateUser(data: LoginDTO): Promise<LoginResponse> {
+		// Find the user
+		const user = await this.findUserByIdentifier(data.identifier);
+		if (!user) {
+			// NOTE: Don't reveal whether user with this identifier exists
+			throw new UnauthorizedError("Invalid credentials provided");
+		}
+
+		// Check if user account is active
+		if (!user.isActive) {
+			throw new UnauthorizedError("Your account is deactivated");
+		}
+
+		// Verify password provided against stored hash
+		const isPasswordValid = await verifyPassword(data.password, user.password);
+		if (!isPasswordValid) {
+			// NOTE: Same generic message as above
+			throw new UnauthorizedError("Invalid credentials provided");
+		}
+
+		// Check if password hash needs updating
+		if (needsRehash(user.password)) {
+			try {
+				// Rehash password with current security parameters
+				const newHashedPassword = await hashPassword(data.password);
+				await prisma.user.update({
+					data: { password: newHashedPassword },
+					where: { id: user.id },
+				});
+
+				logger.info(
+					{ userId: user.id },
+					"User password updated due to security parameters"
+				);
+			} catch (error) {
+				// NOTE: Uer can still log in, we'll try rehashing next time.
+				logger.error(
+					{ error },
+					"Failed to update user password due to security parameters"
+				);
+			}
+		}
+
+		// Generate auth tokens
+		const [accessToken, refreshToken] = await Promise.all([
+			generateAccessToken(user.id, user.email, user.roleId),
+			generateRefreshToken(user.id),
+		]);
+
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { password, ...userWithoutPassword } = user;
+
+		return {
+			accessToken,
+			refreshToken,
+			user: userWithoutPassword,
+		};
+	}
+
+	/**
+	 * Create a new user account.
+	 * Handles the complete user registration process.
+	 *
+	 * @param userData - Validated user registration data
+	 * @returns Promise<UserWithoutPassword> - Returns a promise that resolves to the created user object
+	 * @throws Error if user creation fails for any reason
+	 */
+	async createUser(userData: RegisterDTO): Promise<UserWithoutPassword> {
+		// Check if email already exists
+		const existingUser = await prisma.user.findUnique({
+			where: { email: userData.email },
+		});
+		if (existingUser) {
+			throw new ConflictError("Email address is already registered");
+		}
+
+		// Check if username is already taken
+		const existingUsername = await prisma.user.findUnique({
+			where: { username: userData.username },
+		});
+		if (existingUsername) {
+			throw new ConflictError("Username is already taken");
+		}
+
+		// Hash the password
+		const hashedPassword = await hashPassword(userData.password);
+
+		try {
+			// Create the user
+			const user = await prisma.user.create({
+				data: { ...userData, password: hashedPassword },
+			});
+
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const { password, ...userWithoutPassword } = user;
+
+			return userWithoutPassword;
+		} catch (error) {
+			logger.error({ error }, "Failed to create the user");
+			throw new AppError("Failed to create user account");
+		}
+	}
+
+	/**
+	 * Find user by ID.
+	 *
+	 * @param userId - Unique user identifier
+	 * @returns Promise<User|null> - User object or null if not found
+	 */
+	async findUserById(userId: string): Promise<null | User> {
+		try {
+			const user = await prisma.user.findFirst({
+				where: { id: userId, isActive: true },
+			});
+			return user;
+		} catch (error) {
+			logger.error({ error }, "Find user by ID failed");
+			return null;
+		}
+	}
+
+	/**
+	 * Refresh authentication tokens.
+	 * Allows clients to get new access tokens without re-entering credentials.
+	 *
+	 * @param refreshToken - The refresh token provided by the client
+	 * @returns Promise<LoginResponse> - Returns a promise that resolves to the new authentication response with new tokens
+	 * @throws Error if token refresh fails for any reason
+	 */
+	async refreshTokens(refreshToken: string): Promise<LoginResponse> {
+		const { userId } = await verifyRefreshToken(refreshToken);
+
+		// Ensure user still exists and is active
+		const user = await this.findUserById(userId);
+		if (!user?.isActive) {
+			throw new UnauthorizedError("User not found or account deactivated");
+		}
+
+		const [accessToken, newRefreshToken] = await Promise.all([
+			generateAccessToken(user.id, user.email, user.roleId),
+			generateRefreshToken(user.id),
+		]);
+
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { password, ...userWithoutPassword } = user;
+		return {
+			accessToken,
+			refreshToken: newRefreshToken,
+			user: userWithoutPassword,
+		};
+	}
+
+	/**
+	 * Find user by email or username.
+	 * Private helper method that centralizes user lookup logic.
+	 * This method handles the complexity of searching across two different fields.
+	 *
+	 * @param identifier - Can be either email or username
+	 * @returns Promise<User | null> - Returns a promise that resolves to the user object if found
+	 */
+	private async findUserByIdentifier(identifier: string): Promise<null | User> {
+		try {
+			const user = await prisma.user.findFirst({
+				where: {
+					isActive: true,
+					OR: [{ email: identifier }, { username: identifier }],
+				},
+			});
+			return user;
+		} catch (error) {
+			logger.error({ error }, "Find user by identifier failed");
+			return null;
+		}
+	}
+}
