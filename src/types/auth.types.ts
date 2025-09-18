@@ -40,4 +40,9 @@ export interface LoginResponse {
 	user: UserWithoutPassword;
 }
 
+export interface RequestContext {
+	ipAddress?: string;
+	userAgent?: string;
+}
+
 export type UserWithoutPassword = Omit<User, "password">;

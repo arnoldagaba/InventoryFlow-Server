@@ -7,18 +7,25 @@ import logger from "#utils/logger.js";
 import { hashPassword, needsRehash, verifyPassword } from "#utils/password.js";
 import { LoginDTO, RegisterDTO } from "#validators/auth.validators.js";
 
+import { logLogin, logLogout, logUserCreation } from "./audit.service.js";
+
 export class AuthService {
 	/**
 	 * Authenticate user with email/username and password.
 	 * This method handles the core authentication logic - finding the user and verifying credentials
 	 *
-	 * @param identifier - Can be either email or username
-	 * @param password - Plain text password provided by user
+	 * @param data - Login data containing identifier and password
+	 * @param ipAddress - Client IP address for audit logging
+	 * @param userAgent - Client user agent for audit logging
 	 *
 	 * @returns Promise<LoginResponse> - Returns a promise that resolves to the authentication response with tokens
 	 * @throws Error if authentication fails for any reason
 	 */
-	async authenticateUser(data: LoginDTO): Promise<LoginResponse> {
+	async authenticateUser(
+		data: LoginDTO,
+		ipAddress?: string,
+		userAgent?: string
+	): Promise<LoginResponse> {
 		// Find the user
 		const user = await this.findUserByIdentifier(data.identifier);
 		if (!user) {
@@ -61,10 +68,15 @@ export class AuthService {
 			}
 		}
 
-		// Generate auth tokens
+		// Update last login and generate auth tokens
 		const [accessToken, refreshToken] = await Promise.all([
 			generateAccessToken(user.id, user.email, user.roleId),
 			generateRefreshToken(user.id),
+			prisma.user.update({
+				data: { lastLoginAt: new Date() },
+				where: { id: user.id },
+			}),
+			logLogin(user.id, ipAddress, userAgent),
 		]);
 
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -82,10 +94,16 @@ export class AuthService {
 	 * Handles the complete user registration process.
 	 *
 	 * @param userData - Validated user registration data
+	 * @param createdByUserId - ID of the user creating this account (for audit)
 	 * @returns Promise<UserWithoutPassword> - Returns a promise that resolves to the created user object
 	 * @throws Error if user creation fails for any reason
 	 */
-	async createUser(userData: RegisterDTO): Promise<UserWithoutPassword> {
+	async createUser(
+		userData: RegisterDTO,
+		createdByUserId?: string,
+		ipAddress?: string,
+		userAgent?: string
+	): Promise<UserWithoutPassword> {
 		// Check if email already exists
 		const existingUser = await prisma.user.findUnique({
 			where: { email: userData.email },
@@ -110,6 +128,20 @@ export class AuthService {
 			const user = await prisma.user.create({
 				data: { ...userData, password: hashedPassword },
 			});
+
+			// Log user creation audit
+			if (createdByUserId) {
+				await logUserCreation(
+					user.id,
+					user.email,
+					user.username,
+					createdByUserId,
+					user.firstName,
+					user.lastName,
+					ipAddress,
+					userAgent
+				);
+			}
 
 			// eslint-disable-next-line @typescript-eslint/no-unused-vars
 			const { password, ...userWithoutPassword } = user;
