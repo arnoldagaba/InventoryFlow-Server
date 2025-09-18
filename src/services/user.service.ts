@@ -172,6 +172,25 @@ export class UserService {
 	}
 
 	/**
+	 * Retrieve user details
+	 */
+	async getCurrentUser(userId: string) {
+		try {
+			const user = await this.findUserById(userId);
+			if (!user) {
+				throw new UnauthorizedError("User not found or account deactivated");
+			}
+			
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const { password, ...userWithoutPassword } = user;
+			return userWithoutPassword;
+		} catch (error) {
+			logger.error({ error }, "Find current user failed");
+			return null;
+		}
+	}
+
+	/**
 	 * Refresh authentication tokens.
 	 * Allows clients to get new access tokens without re-entering credentials.
 	 *
