@@ -2,6 +2,7 @@ import type { Request, RequestHandler, Response } from "express";
 
 import { env } from "#config/env.js";
 import { asyncHandler } from "#middleware/error.middleware.js";
+import { logLogout } from "#services/audit.service.js";
 import { userService, UserService } from "#services/user.service.js";
 import { loginSchema, RefreshTokenDTO } from "#validators/auth.validators.js";
 import { StatusCodes } from "http-status-codes";
@@ -32,6 +33,29 @@ class AuthController {
 			message: "Login successful",
 			success: true,
 			user,
+		});
+	});
+
+	/**
+	 * POST /auth/logout
+	 * Logout authenticated user.
+	 */
+	logout: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+		const user = req.user;
+		
+		if (user) {
+			await logLogout(user.id, req.ip, req.headers["user-agent"]);
+		}
+
+		res.clearCookie("refreshToken", {
+			httpOnly: true,
+			sameSite: "strict",
+			secure: env.NODE_ENV === "production",
+		});
+
+		res.status(StatusCodes.OK).json({
+			message: "Logout successful",
+			success: true,
 		});
 	});
 

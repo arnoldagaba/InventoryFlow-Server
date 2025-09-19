@@ -1,9 +1,11 @@
 import { authController } from "#controllers/auth.controller.js";
+import { authmiddleware } from "#middleware/auth.middleware.js";
 import { Router } from "express";
 
 const router: Router = Router();
 
-const { login, refreshToken } = authController;
+const { login, logout, refreshToken } = authController;
+const { optionalAuth } = authmiddleware;
 
 /**
  * @swagger
@@ -96,5 +98,36 @@ router.post("/login", login);
  *                     statusCode: 401
  */
 router.post("/refresh", refreshToken);
+
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: User logout
+ *     description: Logout authenticated user by clearing refresh token cookie and logging the event
+ *     tags: [Authentication]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ *         headers:
+ *           Set-Cookie:
+ *             description: Clears refresh token cookie
+ *             schema:
+ *               type: string
+ *               example: refreshToken=; HttpOnly; Secure; SameSite=Strict; Max-Age=0
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Logout successful"
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ */
+router.post("/logout", optionalAuth, logout);
 
 export default router;
