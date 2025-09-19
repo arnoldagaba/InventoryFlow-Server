@@ -1,12 +1,14 @@
+import { env } from "#config/env.js";
 import argon2 from "argon2";
 import crypto from "crypto";
 
 import logger from "./logger.js";
 
 const ARGON2_OPTIONS: argon2.Options = {
-	memoryCost: 2 ** 16, // 64 MiB
-	parallelism: 1, // 1 thread
-	timeCost: 3, // 3 iterations
+	hashLength: 32, // 32 byte hash length
+	memoryCost: env.NODE_ENV === "development" ? 32768 : 65536, // 32 MB for development (increase to 65536 for production)
+	parallelism: 2, // 2 parallel threads
+	timeCost: env.NODE_ENV === "development" ? 2 : 3, // 2 iterations for development (increase to 3 for production)
 	type: argon2.argon2id,
 };
 
