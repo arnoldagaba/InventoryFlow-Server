@@ -25,16 +25,21 @@ app.use(cookieParser());
 app.use(httpLogger);
 
 // --- DOCUMENTATION ---
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use(
+	"/api-docs",
+	swaggerUi.serve,
+	swaggerUi.setup(swaggerSpec, {
+		swaggerOptions: {
+			filter: true,
+			showRequestHeaders: true,
+			tryItOutEnabled: true,
+		},
+	})
+);
 
 // --- ROUTES ---
 app.get("/", (req, res) => {
-	res.json({
-		message: "InventoryFlow API Server",
-		version: "1.0.0",
-		docs: "/api-docs",
-		api: "/api"
-	});
+	res.redirect("/api-docs");
 });
 
 app.use("/api", appRoutes);
