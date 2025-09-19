@@ -10,7 +10,7 @@ interface ErrorResponse {
 	error: {
 		details?: unknown;
 		message: string;
-		stack?: string;
+		stack?: string | string[];
 		statusCode: number;
 	};
 }
@@ -19,13 +19,23 @@ export const errorHandler = (
 	err: Error,
 	req: Request,
 	res: Response<ErrorResponse>,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	_next: NextFunction
 ): void => {
 	let error = err;
 
 	// Handle Zod validation errors
 	if (error instanceof ZodError) {
-		const message = error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-		error = new AppError(message, StatusCodes.BAD_REQUEST);
+		const message =
+			error.issues.length === 1
+				? error.issues[0].message
+				: error.issues
+						.map((e) => {
+							const path = e.path.length > 0 ? `${e.path.join(".")}: ` : "";
+							return `${path}${e.message}`;
+						})
+						.join(", ");
+		error = new AppError(`Validation error: ${message}`, StatusCodes.BAD_REQUEST);
 	}
 
 	// Handle Prisma errors
@@ -61,7 +71,13 @@ export const errorHandler = (
 		error: {
 			message: appError.message,
 			statusCode: appError.statusCode,
-			...(env.NODE_ENV === "development" && { stack: appError.stack }),
+			...(env.NODE_ENV === "development" && {
+				stack: appError.stack
+					?.split("\n")
+					.filter((line) => line.includes("/Server/src/"))
+					.map((line) => line.trim())
+					.slice(0, 3),
+			}),
 		},
 	});
 };
@@ -76,9 +92,10 @@ const handlePrismaError = (
 	const meta = error.meta;
 
 	switch (code) {
-		case "P2002":
-			{ const field = meta?.target ? ` (${meta.target.join(", ")})` : "";
-			return new AppError(`Duplicate entry${field}`, StatusCodes.CONFLICT); }
+		case "P2002": {
+			const field = meta?.target ? ` (${meta.target.join(", ")})` : "";
+			return new AppError(`Duplicate entry${field}`, StatusCodes.CONFLICT);
+		}
 		case "P2003":
 			return new AppError(
 				`Invalid reference: ${meta?.field_name ?? "foreign key"}`,
