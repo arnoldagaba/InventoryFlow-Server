@@ -162,7 +162,7 @@ export class UserService {
 	async findUserById(userId: string) {
 		try {
 			const user = await prisma.user.findFirst({
-				include: { role: true },
+				include: { role: { include: { permissions: true } } },
 				where: { id: userId, isActive: true },
 			});
 			return user;
@@ -233,7 +233,7 @@ export class UserService {
 	private async findUserByIdentifier(identifier: string) {
 		try {
 			const user = await prisma.user.findFirst({
-				include: { role: true },
+				include: { role: { include: { permissions: true } } },
 				where: {
 					isActive: true,
 					OR: [{ email: identifier }, { username: identifier }],

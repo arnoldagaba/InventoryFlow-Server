@@ -25,7 +25,7 @@ export class AuthMiddleware {
 				const payload = await verifyAccessToken(token);
 				const user = await this.userService.findUserById(payload.userId);
 				if (user) {
-					req.user = user;
+					req.user = user as NonNullable<typeof user>;
 				}
 			} catch (error) {
 				logger.error({ error }, "Failed to verify access token");
@@ -68,7 +68,7 @@ export class AuthMiddleware {
 			}
 
 			// Attach user object to request
-			req.user = user;
+			req.user = user as NonNullable<typeof user>;
 			next();
 		} catch (error) {
 			if (error instanceof Error) {
@@ -84,6 +84,34 @@ export class AuthMiddleware {
 			}
 		}
 	};
+
+	requirePermission =
+		(requiredPermission: string) =>
+		(req: Request, res: Response, next: NextFunction): void => {
+			const user = req.user;
+			if (!user) {
+				res.status(StatusCodes.UNAUTHORIZED).json({
+					message: "User not found",
+					success: false,
+				});
+				return;
+			}
+
+			// Check if user has the required permission
+			const hasPermission = user.role.permissions.some(
+				(p) => p.permission === requiredPermission
+			);
+
+			if (!hasPermission) {
+				res.status(StatusCodes.FORBIDDEN).json({
+					message: `You don't have permission to ${requiredPermission.toLowerCase().replace("_", " ")}`,
+					success: false,
+				});
+				return;
+			}
+
+			next();
+		};
 
 	requireRole =
 		(allowedRoles: string[]) =>

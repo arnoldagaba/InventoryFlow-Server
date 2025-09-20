@@ -72,7 +72,7 @@ router.get("/me", getCurrentUser);
  * /users/register:
  *   post:
  *     summary: Register a new user
- *     description: Create a new user account. Only accessible by Admin users. The action is logged in the audit trail.
+ *     description: Create a new user account. Requires USERS_CREATE permission. The action is logged in the audit trail.
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -168,14 +168,14 @@ router.get("/me", getCurrentUser);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Insufficient permissions (Admin role required)
+ *         description: Insufficient permissions (USERS_CREATE permission required)
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *             example:
  *               error:
- *                 message: "Forbidden"
+ *                 message: "You don't have permission to users create"
  *                 statusCode: 403
  */
 router.post("/register", requireRole(["Admin"]), registerUser);
