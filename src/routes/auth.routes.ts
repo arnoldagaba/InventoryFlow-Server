@@ -5,7 +5,7 @@ import { Router } from "express";
 const router: Router = Router();
 
 const { login, logout, refreshToken } = authController;
-const { optionalAuth } = authmiddleware;
+const { optionalAuth, requireAuth } = authmiddleware;
 
 /**
  * @swagger
@@ -97,7 +97,7 @@ router.post("/login", login);
  *                     message: "Invalid refresh token"
  *                     statusCode: 401
  */
-router.post("/refresh", refreshToken);
+router.post("/refresh", requireAuth, refreshToken);
 
 /**
  * @swagger
