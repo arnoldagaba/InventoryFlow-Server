@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-const emailSchema = z.email("Please provide a valid email address").toLowerCase().trim();
-const passwordSchema = z
+export const emailSchema = z.string().email("Please provide a valid email address").toLowerCase().trim();
+export const passwordSchema = z
 	.string()
 	.min(8, "Password must be at least 8 characters long")
 	.regex(/[A-Z]/, "Password must contain at least one uppercase letter")
@@ -10,28 +10,6 @@ const passwordSchema = z
 	.regex(/[^A-Za-z0-9]/, "Password must contain at least one special character");
 
 // Validation schemas using Zod for type-safe input validation
-export const registerSchema = z.object({
-	email: emailSchema,
-	firstName: z
-		.string()
-		.min(1, "First name is required")
-		.max(50, "First name must be less than 50 characters")
-		.trim(),
-	lastName: z
-		.string()
-		.min(1, "Last name is required")
-		.max(50, "Last name must be less than 50 characters")
-		.trim(),
-	password: passwordSchema,
-	roleId: z.string(),
-	username: z
-		.string()
-		.min(1, "Username is required")
-		.max(50, "Username must be less than 50 characters")
-		.trim(),
-});
-export type RegisterDTO = z.infer<typeof registerSchema>;
-
 export const loginSchema = z.object({
 	identifier: z
 		.string()

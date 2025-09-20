@@ -38,15 +38,17 @@ class AuthController {
 
 	/**
 	 * POST /auth/logout
-	 * Logout authenticated user.
+	 * Logout user (works even with expired tokens).
 	 */
 	logout: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
 		const user = req.user;
 		
+		// Only log if user is authenticated (token was valid)
 		if (user) {
 			await logLogout(user.id, req.ip, req.headers["user-agent"]);
 		}
 
+		// Always clear the refresh token cookie regardless of token validity
 		res.clearCookie("refreshToken", {
 			httpOnly: true,
 			sameSite: "strict",

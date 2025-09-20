@@ -4,7 +4,8 @@ import { LoginResponse, UserWithoutPassword } from "#types/auth.types.js";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "#utils/jwt.js";
 import logger from "#utils/logger.js";
 import { hashPassword, needsRehash, verifyPassword } from "#utils/password.js";
-import { LoginDTO, RegisterDTO } from "#validators/auth.validators.js";
+import { LoginDTO } from "#validators/auth.validators.js";
+import { RegisterDTO } from "#validators/user.validators.js";
 
 import { logLogin, logUserCreation } from "./audit.service.js";
 

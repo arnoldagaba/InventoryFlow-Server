@@ -3,8 +3,8 @@ import { authmiddleware } from "#middleware/auth.middleware.js";
 import { Router } from "express";
 
 const router: Router = Router();
-const { requireAuth } = authmiddleware;
-const { getCurrentUser } = userController;
+const { requireAuth, requireRole } = authmiddleware;
+const { getCurrentUser, registerUser } = userController;
 
 router.use(requireAuth);
 
@@ -66,5 +66,118 @@ router.use(requireAuth);
  *                     statusCode: 401
  */
 router.get("/me", getCurrentUser);
+
+/**
+ * @swagger
+ * /users/register:
+ *   post:
+ *     summary: Register a new user
+ *     description: Create a new user account. Only accessible by Admin users. The action is logged in the audit trail.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - username
+ *               - password
+ *               - firstName
+ *               - lastName
+ *               - roleId
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: "john.doe@inventoryflow.com"
+ *               username:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 50
+ *                 example: "johndoe"
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).+$"
+ *                 example: "SecurePass123!"
+ *                 description: "Must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+ *               firstName:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 50
+ *                 example: "John"
+ *               lastName:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 50
+ *                 example: "Doe"
+ *               roleId:
+ *                 type: string
+ *                 example: "clx1234567890"
+ *                 description: "ID of the role to assign to the user"
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "User registered successfully"
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Validation error or duplicate email/username
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               validation_error:
+ *                 summary: Validation failed
+ *                 value:
+ *                   error:
+ *                     message: "Validation error: Password must contain at least one uppercase letter"
+ *                     statusCode: 400
+ *               duplicate_email:
+ *                 summary: Email already exists
+ *                 value:
+ *                   error:
+ *                     message: "Email address is already registered"
+ *                     statusCode: 409
+ *               duplicate_username:
+ *                 summary: Username already taken
+ *                 value:
+ *                   error:
+ *                     message: "Username is already taken"
+ *                     statusCode: 409
+ *       401:
+ *         description: Missing or invalid authentication token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Insufficient permissions (Admin role required)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               error:
+ *                 message: "Forbidden"
+ *                 statusCode: 403
+ */
+router.post("/register", requireRole(["Admin"]), registerUser);
 
 export default router;
