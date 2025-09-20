@@ -26,15 +26,12 @@ export const errorHandler = (
 
 	// Handle Zod validation errors
 	if (error instanceof ZodError) {
-		const message =
-			error.issues.length === 1
-				? error.issues[0].message
-				: error.issues
-						.map((e) => {
-							const path = e.path.length > 0 ? `${e.path.join(".")}: ` : "";
-							return `${path}${e.message}`;
-						})
-						.join(", ");
+		const message = error.issues
+			.map((issue) => {
+				const path = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+				return `${path}${issue.message}`;
+			})
+			.join(", ");
 		error = new AppError(`Validation error: ${message}`, StatusCodes.BAD_REQUEST);
 	}
 

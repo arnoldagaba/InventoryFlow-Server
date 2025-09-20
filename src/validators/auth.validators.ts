@@ -12,11 +12,17 @@ export const passwordSchema = z
 // Validation schemas using Zod for type-safe input validation
 export const loginSchema = z.object({
 	identifier: z
-		.string()
-		.min(1, "Email or username is required")
-		.max(254, "Identifier too")
+		.string({ required_error: "Email or username is required" })
+		.min(1, "Email or username cannot be empty")
+		.max(254, "Identifier is too long")
 		.toLowerCase(),
-	password: passwordSchema,
+	password: z
+		.string({ required_error: "Password is required" })
+		.min(8, "Password must be at least 8 characters long")
+		.regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+		.regex(/[a-z]/, "Password must contain at least one lowercase letter")
+		.regex(/\d/, "Password must contain at least one number")
+		.regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
 });
 export type LoginDTO = z.infer<typeof loginSchema>;
 

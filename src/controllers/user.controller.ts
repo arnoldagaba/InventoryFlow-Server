@@ -6,6 +6,15 @@ import { StatusCodes } from "http-status-codes";
 
 class UserController {
 	/**
+	 * GET /users/
+	 * Get all users. Requires USERS_VIEW permission.
+	 */
+	getAllUsers: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+		const users = await userService.getAllUsers();
+		res.status(StatusCodes.OK).json(users);
+	});
+
+	/**
 	 * GET /users/me
 	 * Get current user profile information.
 	 */
@@ -17,6 +26,26 @@ class UserController {
 
 		const user = await userService.getCurrentUser(req.user.id);
 		res.status(StatusCodes.OK).json(user);
+	});
+
+	/**
+	 * GET /users/:id
+	 * Get user by ID. Requires USERS_VIEW permission.
+	 */
+	getSpecificUser: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+		const userId = req.params.id;
+
+		const user = await userService.findUserById(userId);
+		if (!user) {
+			res.status(StatusCodes.NOT_FOUND).json({ message: "User not found" });
+			return;
+		}
+
+		// Leave out the password
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { password, ...userWithoutPassword } = user;
+
+		res.status(StatusCodes.OK).json(userWithoutPassword);
 	});
 
 	/**

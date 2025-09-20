@@ -3,8 +3,8 @@ import { authmiddleware } from "#middleware/auth.middleware.js";
 import { Router } from "express";
 
 const router: Router = Router();
-const { requireAuth, requireRole } = authmiddleware;
-const { getCurrentUser, registerUser } = userController;
+const { requireAuth, requirePermission, requireRole } = authmiddleware;
+const { getAllUsers, getCurrentUser, getSpecificUser, registerUser } = userController;
 
 router.use(requireAuth);
 
@@ -66,6 +66,58 @@ router.use(requireAuth);
  *                     statusCode: 401
  */
 router.get("/me", getCurrentUser);
+
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     summary: Get all users
+ *     description: Retrieve a list of all users in the system. Requires USERS_VIEW permission.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/User'
+ *             example:
+ *               - id: "clx1234567890"
+ *                 email: "admin@inventoryflow.com"
+ *                 username: "admin"
+ *                 firstName: "System"
+ *                 lastName: "Administrator"
+ *                 isActive: true
+ *                 lastLoginAt: "2024-01-15T10:30:00.000Z"
+ *                 createdAt: "2024-01-01T00:00:00.000Z"
+ *                 updatedAt: "2024-01-15T10:30:00.000Z"
+ *                 role:
+ *                   id: "role123"
+ *                   name: "Admin"
+ *                   description: "Full system access"
+ *                   isActive: true
+ *       401:
+ *         description: Missing or invalid authentication token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Insufficient permissions (USERS_VIEW permission required)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               error:
+ *                 message: "You don't have permission to users view"
+ *                 statusCode: 403
+ */
+router.get("/", requirePermission("USERS_VIEW"), getAllUsers);
 
 /**
  * @swagger
@@ -179,5 +231,55 @@ router.get("/me", getCurrentUser);
  *                 statusCode: 403
  */
 router.post("/register", requireRole(["Admin"]), registerUser);
+
+/**
+ * @swagger
+ * /users/:id:
+ *   get:
+ *     summary: Get a specific user
+ *     description: Retrieve a users in the system. Requires USERS_VIEW permission.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *                 $ref: '#/components/schemas/User'
+ *             example:
+ *               id: "clx1234567890"
+ *               email: "admin@inventoryflow.com"
+ *               username: "admin"
+ *               firstName: "System"
+ *               lastName: "Administrator"
+ *               isActive: true
+ *               lastLoginAt: "2024-01-15T10:30:00.000Z"
+ *               createdAt: "2024-01-01T00:00:00.000Z"
+ *               updatedAt: "2024-01-15T10:30:00.000Z"
+ *               role:
+ *                 id: "role123"
+ *                 name: "Admin"
+ *                 description: "Full system access"
+ *                 isActive: true
+ *       401:
+ *         description: Missing or invalid authentication token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Insufficient permissions (USERS_VIEW permission required)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               error:
+ *                 message: "You don't have permission to users view"
+ *                 statusCode: 403
+ */
+router.get("/:id", requirePermission("USERS_VIEW"), getSpecificUser);
 
 export default router;

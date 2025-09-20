@@ -173,6 +173,20 @@ export class UserService {
 	}
 
 	/**
+	 * Get all users with their roles
+	 */
+	async getAllUsers() {
+		const users = await prisma.user.findMany({
+			include: { role: true },
+			orderBy: { createdAt: "desc" },
+		});
+		
+		// Remove password field from each user
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		return users.map(({ password, ...user }) => user);
+	}
+
+	/**
 	 * Retrieve user details
 	 */
 	async getCurrentUser(userId: string) {
