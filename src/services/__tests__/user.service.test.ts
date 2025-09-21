@@ -1,69 +1,52 @@
-import type { User } from "#generated/prisma/client.js";
-
+/* eslint-disable @typescript-eslint/unbound-method */
 import { ConflictError, UnauthorizedError } from "#errors/AppError.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UserService } from "../user.service.js";
 
-// Create proper mock types - this helps TypeScript understand what we're mocking
-const mockPrisma = {
-	user: {
-		create: vi.fn(),
-		findFirst: vi.fn(),
-		findMany: vi.fn(),
-		findUnique: vi.fn(),
-		update: vi.fn(),
-	},
-};
-
-// Mock modules with proper typing
+// Mock Prisma - we'll simulate database responses instead of using real database
+// This makes tests fast and predictable
 vi.mock("#config/prisma.js", () => ({
-	default: mockPrisma,
+	default: {
+		user: {
+			create: vi.fn(),
+			findFirst: vi.fn(),
+			findMany: vi.fn(),
+			findUnique: vi.fn(),
+			update: vi.fn(),
+		},
+	},
 }));
 
-// Mock the audit service functions
-const mockLogLogin = vi.fn();
-const mockLogUserCreation = vi.fn();
-
+// Mock the audit service - we don't want to actually log during tests
 vi.mock("../audit.service.js", () => ({
-	logLogin: mockLogLogin,
-	logUserCreation: mockLogUserCreation,
+	logLogin: vi.fn(),
+	logUserCreation: vi.fn(),
 }));
 
-// Mock password utilities with proper typing
-const mockHashPassword = vi.fn();
-const mockVerifyPassword = vi.fn();
-const mockNeedsRehash = vi.fn();
-
+// Mock password utilities - we'll control their behavior for testing
 vi.mock("#utils/password.js", () => ({
-	hashPassword: mockHashPassword,
-	needsRehash: mockNeedsRehash,
-	verifyPassword: mockVerifyPassword,
+	hashPassword: vi.fn(),
+	needsRehash: vi.fn(),
+	verifyPassword: vi.fn(),
 }));
 
-// Mock JWT utilities with proper typing
-const mockGenerateAccessToken = vi.fn();
-const mockGenerateRefreshToken = vi.fn();
-const mockVerifyRefreshToken = vi.fn();
-
+// Mock JWT utilities
 vi.mock("#utils/jwt.js", () => ({
-	generateAccessToken: mockGenerateAccessToken,
-	generateRefreshToken: mockGenerateRefreshToken,
-	verifyRefreshToken: mockVerifyRefreshToken,
+	generateAccessToken: vi.fn(),
+	generateRefreshToken: vi.fn(),
+	verifyRefreshToken: vi.fn(),
 }));
+
+// Import the mocked modules so we can control their behavior
+import prisma from "#config/prisma.js";
+import { generateAccessToken, generateRefreshToken } from "#utils/jwt.js";
+import { hashPassword, needsRehash, verifyPassword } from "#utils/password.js";
+
+import { logLogin } from "../audit.service.js";
 
 describe("UserService", () => {
 	let userService: UserService;
-
-	// Helper test types: Prisma's generated `User` type doesn't include relation fields
-	// like `role` with nested `permissions`. Create a test-friendly intersection.
-	type UserWithRole = User & {
-		role?: null | {
-			id: string;
-			name: string;
-			permissions?: { permission: string }[];
-		};
-	};
 
 	// Reset all mocks before each test to ensure clean state
 	beforeEach(() => {
@@ -89,17 +72,18 @@ describe("UserService", () => {
 				lastName: "User",
 				password: "$argon2id$v=19$m=65536,t=3,p=2$hashed-password",
 				role: { id: "role-1", name: "Admin", permissions: [] },
+				roleId: "role-1",
 				updatedAt: new Date(),
 				username: "admin",
 			};
 
-			// Set up mock responses using the properly typed mocks
-			mockPrisma.user.findFirst.mockResolvedValue(mockUser as unknown as UserWithRole);
-			mockVerifyPassword.mockResolvedValue(true);
-			mockNeedsRehash.mockReturnValue(false);
-			mockGenerateAccessToken.mockResolvedValue("mock-access-token");
-			mockGenerateRefreshToken.mockResolvedValue("mock-refresh-token");
-			mockPrisma.user.update.mockResolvedValue(mockUser as unknown as UserWithRole);
+			// Set up mock responses - tell the mocks what to return
+			vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
+			vi.mocked(verifyPassword).mockResolvedValue(true);
+			vi.mocked(needsRehash).mockReturnValue(false);
+			vi.mocked(generateAccessToken).mockResolvedValue("mock-access-token");
+			vi.mocked(generateRefreshToken).mockResolvedValue("mock-refresh-token");
+			vi.mocked(prisma.user.update).mockResolvedValue(mockUser);
 
 			// Act: Try to authenticate the user
 			const result = await userService.authenticateUser(loginData, "127.0.0.1", "test-agent");
@@ -108,6 +92,7 @@ describe("UserService", () => {
 			expect(result).toEqual({
 				accessToken: "mock-access-token",
 				refreshToken: "mock-refresh-token",
+				// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 				user: expect.objectContaining({
 					email: "admin@inventoryflow.com",
 					id: "user-123",
@@ -116,7 +101,7 @@ describe("UserService", () => {
 			});
 
 			// Verify that the right methods were called with right parameters
-			expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
+			expect(prisma.user.findFirst).toHaveBeenCalledWith({
 				include: { role: { include: { permissions: true } } },
 				where: {
 					isActive: true,
@@ -127,12 +112,12 @@ describe("UserService", () => {
 				},
 			});
 
-			expect(mockVerifyPassword).toHaveBeenCalledWith(
+			expect(verifyPassword).toHaveBeenCalledWith(
 				"SecureAdmin123!",
 				"$argon2id$v=19$m=65536,t=3,p=2$hashed-password"
 			);
 
-			expect(mockLogLogin).toHaveBeenCalledWith("user-123", "127.0.0.1", "test-agent");
+			expect(logLogin).toHaveBeenCalledWith("user-123", "127.0.0.1", "test-agent");
 		});
 
 		it("should reject authentication for non-existent user", async () => {
@@ -142,7 +127,7 @@ describe("UserService", () => {
 				password: "AnyPassword123!",
 			};
 
-			mockPrisma.user.findFirst.mockResolvedValue(null);
+			vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
 
 			// Act & Assert: Should throw UnauthorizedError
 			await expect(
@@ -154,21 +139,26 @@ describe("UserService", () => {
 			).rejects.toThrow("Invalid credentials provided");
 
 			// Should not attempt password verification for non-existent user
-			expect(mockVerifyPassword).not.toHaveBeenCalled();
+			expect(verifyPassword).not.toHaveBeenCalled();
 		});
 
 		it("should reject authentication for inactive user", async () => {
 			// Arrange: User exists but account is deactivated
 			const mockInactiveUser = {
+				createdAt: new Date(), // Add a placeholder value for createdAt
 				email: "inactive@example.com",
+				firstName: "John", // Add a placeholder value for firstName
 				id: "user-456",
 				isActive: false, // Key difference - account is disabled
+				lastLoginAt: null, // Add a placeholder value for lastLoginAt
+				lastName: "Doe", // Add a placeholder value for lastName
 				password: "hashed-password",
+				roleId: "role-2", // Add a placeholder value for roleId
+				updatedAt: new Date(), // Add a placeholder value for updatedAt
+				username: "test", // Add a placeholder value for username
 			};
 
-			mockPrisma.user.findFirst.mockResolvedValue(
-				mockInactiveUser as unknown as Partial<User>
-			);
+			vi.mocked(prisma.user.findFirst).mockResolvedValue(mockInactiveUser);
 
 			// Act & Assert: Should reject inactive user
 			await expect(
@@ -180,21 +170,28 @@ describe("UserService", () => {
 			).rejects.toThrow("Your account is deactivated");
 
 			// Should not verify password for inactive user
-			expect(mockVerifyPassword).not.toHaveBeenCalled();
+			expect(verifyPassword).not.toHaveBeenCalled();
 		});
 
 		it("should reject authentication for wrong password", async () => {
 			// Arrange: User exists but password is wrong
 			const mockUser = {
+				createdAt: new Date(), // add createdAt
 				email: "user@example.com",
+				firstName: "First Name",
 				id: "user-789",
 				isActive: true,
+				lastLoginAt: new Date(),
+				lastName: "Last Name",
 				password: "correct-hashed-password",
 				role: { id: "role-1", name: "User", permissions: [] },
+				roleId: "role-123",
+				updatedAt: new Date(), // add updatedAt
+				username: "username",
 			};
 
-			mockPrisma.user.findFirst.mockResolvedValue(mockUser as unknown as UserWithRole);
-			mockVerifyPassword.mockResolvedValue(false); // Password verification fails
+			vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
+			vi.mocked(verifyPassword).mockResolvedValue(false); // Password verification fails
 
 			// Act & Assert: Should reject wrong password
 			await expect(
@@ -206,7 +203,7 @@ describe("UserService", () => {
 			).rejects.toThrow("Invalid credentials provided");
 
 			// Should have attempted password verification
-			expect(mockVerifyPassword).toHaveBeenCalledWith(
+			expect(verifyPassword).toHaveBeenCalledWith(
 				"WrongPassword123!",
 				"correct-hashed-password"
 			);
@@ -228,18 +225,18 @@ describe("UserService", () => {
 			const createdUser = {
 				id: "new-user-123",
 				...userData,
-				createdAt: new Date(),
+				createdAt: new Date("2025-09-21T14:09:27.680Z"),
 				isActive: true,
 				lastLoginAt: null,
 				password: "hashed-password",
-				updatedAt: new Date(),
+				updatedAt: new Date("2025-09-21T14:09:27.680Z"),
 			};
 
 			// Mock successful creation flow
-			mockPrisma.user.findUnique.mockResolvedValue(null); // Email doesn't exist
-			mockPrisma.user.findUnique.mockResolvedValue(null); // Username doesn't exist
-			mockHashPassword.mockResolvedValue("hashed-password");
-			mockPrisma.user.create.mockResolvedValue(createdUser as unknown as User);
+			vi.mocked(prisma.user.findUnique).mockResolvedValue(null); // Email doesn't exist
+			vi.mocked(prisma.user.findUnique).mockResolvedValue(null); // Username doesn't exist
+			vi.mocked(hashPassword).mockResolvedValue("hashed-password");
+			vi.mocked(prisma.user.create).mockResolvedValue(createdUser);
 
 			// Act: Create the user
 			const result = await userService.createUser(
@@ -251,7 +248,7 @@ describe("UserService", () => {
 
 			// Assert: Should return user without password
 			expect(result).toEqual({
-				createdAt: expect.any(Date),
+				createdAt: new Date("2025-09-21T14:09:27.680Z"),
 				email: "newuser@example.com",
 				firstName: "New",
 				id: "new-user-123",
@@ -259,15 +256,15 @@ describe("UserService", () => {
 				lastLoginAt: null,
 				lastName: "User",
 				roleId: "role-123",
-				updatedAt: expect.any(Date),
+				updatedAt: new Date("2025-09-21T14:09:27.680Z"),
 				username: "newuser",
 			});
 
 			// Should have hashed the password
-			expect(mockHashPassword).toHaveBeenCalledWith("SecurePass123!");
+			expect(hashPassword).toHaveBeenCalledWith("SecurePass123!");
 
 			// Should have created user in database
-			expect(mockPrisma.user.create).toHaveBeenCalledWith({
+			expect(prisma.user.create).toHaveBeenCalledWith({
 				data: {
 					...userData,
 					password: "hashed-password",
@@ -287,11 +284,20 @@ describe("UserService", () => {
 			};
 
 			const existingUser = {
+				createdAt: new Date(),
 				email: "existing@example.com",
+				firstName: "Existing",
 				id: "existing-123",
+				isActive: true,
+				lastLoginAt: null,
+				lastName: "User",
+				password: "existing-password",
+				roleId: "role-123",
+				updatedAt: new Date(),
+				username: "existing-username",
 			};
 
-			mockPrisma.user.findUnique.mockResolvedValue(existingUser as unknown as Partial<User>);
+			vi.mocked(prisma.user.findUnique).mockResolvedValue(existingUser);
 
 			// Act & Assert: Should throw ConflictError
 			await expect(
@@ -303,8 +309,8 @@ describe("UserService", () => {
 			).rejects.toThrow("Email address is already registered");
 
 			// Should not have attempted to hash password or create user
-			expect(mockHashPassword).not.toHaveBeenCalled();
-			expect(mockPrisma.user.create).not.toHaveBeenCalled();
+			expect(hashPassword).not.toHaveBeenCalled();
+			expect(prisma.user.create).not.toHaveBeenCalled();
 		});
 	});
 
@@ -312,17 +318,25 @@ describe("UserService", () => {
 		it("should find active user by ID", async () => {
 			// Arrange: Active user exists
 			const mockUser = {
+				createdAt: new Date(),
 				email: "user@example.com",
+				firstName: "John",
 				id: "user-123",
 				isActive: true,
+				lastLoginAt: null,
+				lastName: "Doe",
+				password: "password123",
 				role: {
 					id: "role-1",
 					name: "User",
 					permissions: [{ permission: "USERS_VIEW" }],
 				},
+				roleId: "role-1",
+				updatedAt: new Date(),
+				username: "user123",
 			};
 
-			mockPrisma.user.findFirst.mockResolvedValue(mockUser as unknown as UserWithRole);
+			vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
 
 			// Act: Look up user
 			const result = await userService.findUserById("user-123");
@@ -330,7 +344,7 @@ describe("UserService", () => {
 			// Assert: Should return the user
 			expect(result).toEqual(mockUser);
 
-			expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
+			expect(prisma.user.findFirst).toHaveBeenCalledWith({
 				include: { role: { include: { permissions: true } } },
 				where: { id: "user-123", isActive: true },
 			});
@@ -338,7 +352,7 @@ describe("UserService", () => {
 
 		it("should return null for inactive user", async () => {
 			// Arrange: No active user found
-			mockPrisma.user.findFirst.mockResolvedValue(null);
+			vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
 
 			// Act: Try to find inactive user
 			const result = await userService.findUserById("inactive-user-123");
