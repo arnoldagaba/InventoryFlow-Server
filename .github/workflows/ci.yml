@@ -14,37 +14,52 @@ env:
     NODE_ENV: test
 
 jobs:
-    # Job 1: Install dependencies and setup (foundation for other jobs)
+    # Job 1: Setup dependencies (foundation for other jobs)
     setup:
         name: Setup Dependencies
         runs-on: ubuntu-latest
-
+        outputs:
+            cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
+        
         steps:
-            - name: Get the code
+            - name: Checkout code
               uses: actions/checkout@v4
 
             - name: Setup Node.js from .nvmrc
               uses: actions/setup-node@v4
               with:
                   node-version-file: ".nvmrc"
-                  cache: "pnpm"
+
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
-                  version: "latest"
+                  version: 9
 
-            - name: Install pnpm
-              run: npm install -g pnpm
+            - name: Get pnpm store directory
+              shell: bash
+              run: |
+                  echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+            - name: Setup pnpm cache
+              uses: actions/cache@v4
+              with:
+                  path: ${{ env.STORE_PATH }}
+                  key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pnpm-store-
 
-            # Cache node_modules for other jobs (speeds up workflow)
-            - name: Cache dependencies
+            - name: Cache node_modules
+              id: cache-deps
               uses: actions/cache@v4
               with:
                   path: node_modules
-                  key: ${{ runner.os }}-node-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  key: ${{ runner.os }}-node-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-node-modules-
+
+            - name: Install dependencies
+              if: steps.cache-deps.outputs.cache-hit != 'true'
+              run: pnpm install --frozen-lockfile
 
     # Job 2: TypeScript compilation check
     typescript:
@@ -53,18 +68,29 @@ jobs:
         needs: setup
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
+              
+            - name: Setup Node.js from .nvmrc
+              uses: actions/setup-node@v4
               with:
                   node-version-file: ".nvmrc"
-                  cache: "pnpm"
+
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
-                  version: "latest"
-            - name: Install pnpm
-              run: npm install -g pnpm
-            - run: pnpm install --frozen-lockfile
+                  version: 9
+
+            - name: Restore dependencies cache
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: ${{ runner.os }}-node-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-node-modules-
+
+            - name: Install dependencies (if cache miss)
+              run: pnpm install --frozen-lockfile
 
             # Check that your TypeScript code compiles without errors
             - name: TypeScript type checking
@@ -81,18 +107,29 @@ jobs:
         needs: setup
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
+              
+            - name: Setup Node.js from .nvmrc
+              uses: actions/setup-node@v4
               with:
                   node-version-file: ".nvmrc"
-                  cache: "pnpm"
+
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
-                  version: "latest"
-            - name: Install pnpm
-              run: npm install -g pnpm
-            - run: pnpm install --frozen-lockfile
+                  version: 9
+
+            - name: Restore dependencies cache
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: ${{ runner.os }}-node-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-node-modules-
+
+            - name: Install dependencies (if cache miss)
+              run: pnpm install --frozen-lockfile
 
             # Check that your code follows consistent style rules
             - name: ESLint code quality check
@@ -109,28 +146,29 @@ jobs:
         needs: setup
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
+              
+            - name: Setup Node.js from .nvmrc
+              uses: actions/setup-node@v4
               with:
                   node-version-file: ".nvmrc"
-                  cache: "pnpm"
-            - name: Setup pnpm
-              uses: pnpm/action-setup@v2
-              with:
-                  version: "latest"
-            - name: Install pnpm
-              run: npm install -g pnpm
-            - run: pnpm install --frozen-lockfile
 
-            # Set up test environment variables
-            - name: Setup test environment
-              run: |
-                  echo "Setting up test environment variables"
-              env:
-                  JWT_ACCESS_SECRET: test-access-secret-key-for-ci-testing
-                  JWT_REFRESH_SECRET: test-refresh-secret-key-for-ci-testing
-                  ACCESS_TOKEN_EXPIRY: 15m
-                  REFRESH_TOKEN_EXPIRY: 7d
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 9
+
+            - name: Restore dependencies cache
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: ${{ runner.os }}-node-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-node-modules-
+
+            - name: Install dependencies (if cache miss)
+              run: pnpm install --frozen-lockfile
 
             # Run your utility function tests (password, JWT, validators)
             - name: Run unit tests
@@ -148,18 +186,29 @@ jobs:
         needs: setup
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
+              
+            - name: Setup Node.js from .nvmrc
+              uses: actions/setup-node@v4
               with:
                   node-version-file: ".nvmrc"
-                  cache: "pnpm"
+
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
-                  version: "latest"
-            - name: Install pnpm
-              run: npm install -g pnpm
-            - run: pnpm install --frozen-lockfile
+                  version: 9
+
+            - name: Restore dependencies cache
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: ${{ runner.os }}-node-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-node-modules-
+
+            - name: Install dependencies (if cache miss)
+              run: pnpm install --frozen-lockfile
 
             # Run tests for your services (UserService, etc.)
             - name: Run service tests
@@ -192,18 +241,29 @@ jobs:
                     - 5432:5432
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
+              
+            - name: Setup Node.js from .nvmrc
+              uses: actions/setup-node@v4
               with:
                   node-version-file: ".nvmrc"
-                  cache: "pnpm"
+
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
-                  version: "latest"
-            - name: Install pnpm
-              run: npm install -g pnpm
-            - run: pnpm install --frozen-lockfile
+                  version: 9
+
+            - name: Restore dependencies cache
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: ${{ runner.os }}-node-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-node-modules-
+
+            - name: Install dependencies (if cache miss)
+              run: pnpm install --frozen-lockfile
 
             # Setup test database schema
             - name: Setup test database
@@ -231,22 +291,33 @@ jobs:
         needs: [unit-tests, service-tests]
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
+              
+            - name: Setup Node.js from .nvmrc
+              uses: actions/setup-node@v4
               with:
                   node-version-file: ".nvmrc"
-                  cache: "pnpm"
+
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
-                  version: "latest"
-            - name: Install pnpm
-              run: npm install -g pnpm
-            - run: pnpm install --frozen-lockfile
+                  version: 9
+
+            - name: Restore dependencies cache
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: ${{ runner.os }}-node-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-node-modules-
+
+            - name: Install dependencies (if cache miss)
+              run: pnpm install --frozen-lockfile
 
             # Generate comprehensive coverage report
             - name: Generate coverage report
-              run: pnpm run test:coverage
+              run: pnpm run coverage
               env:
                   JWT_ACCESS_SECRET: test-access-secret-key-for-ci-testing
                   JWT_REFRESH_SECRET: test-refresh-secret-key-for-ci-testing
