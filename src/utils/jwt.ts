@@ -2,17 +2,13 @@ import { env } from "#config/env.js";
 import { AppError, UnauthorizedError } from "#errors/AppError.js";
 import { JWTPayload } from "#types/auth.types.js";
 import { createSecretKey } from "crypto";
+import crypto from "crypto";
 import { jwtVerify, SignJWT } from "jose";
 
 import logger from "./logger.js";
 
 const ACCESS_TOKEN_EXPIRATION = env.ACCESS_TOKEN_EXPIRY;
-const JWT_ACCESS_SECRET = env.JWT_ACCESS_SECRET;
-const ACCESS_TOKEN_KEY = createSecretKey(Buffer.from(JWT_ACCESS_SECRET, "utf-8"));
-
-const JWT_REFRESH_SECRET = env.JWT_REFRESH_SECRET;
 const REFRESH_TOKEN_EXPIRATION = env.REFRESH_TOKEN_EXPIRY;
-const REFRESH_TOKEN_KEY = createSecretKey(Buffer.from(JWT_REFRESH_SECRET, "utf-8"));
 
 /**
  * Extract token from Authorization header.
@@ -44,8 +40,12 @@ export function generateAccessToken(userId: string, email: string, role: string)
 	try {
 		const now = Math.floor(Date.now() / 1000);
 
+		// Include a short unique identifier (jti) so tokens generated in the
+		// same second are still unique. Use crypto.randomUUID() when available.
+		const jti = crypto.randomUUID();
+
 		// Create JWT with minimal payload
-		const jwt = new SignJWT({ email, role, type: "access", userId } as JWTPayload)
+		const jwt = new SignJWT({ email, jti, role, type: "access", userId } as JWTPayload)
 			.setProtectedHeader({
 				alg: "HS256",
 			})
@@ -53,7 +53,7 @@ export function generateAccessToken(userId: string, email: string, role: string)
 			.setExpirationTime(now + parseExpiry(ACCESS_TOKEN_EXPIRATION))
 			.setIssuer("InventoryFlow")
 			.setAudience("InventoryFlow-users")
-			.sign(ACCESS_TOKEN_KEY);
+			.sign(getAccessTokenKey());
 
 		return jwt;
 	} catch (error) {
@@ -73,7 +73,8 @@ export function generateRefreshToken(userId: string) {
 		const now = Math.floor(Date.now() / 1000);
 
 		// Create JWT with minimal payload
-		const jwt = new SignJWT({ type: "refresh", userId } as JWTPayload)
+		const jti = crypto.randomUUID();
+		const jwt = new SignJWT({ jti, type: "refresh", userId } as JWTPayload)
 			.setProtectedHeader({
 				alg: "HS256",
 			})
@@ -81,7 +82,7 @@ export function generateRefreshToken(userId: string) {
 			.setExpirationTime(now + parseExpiry(REFRESH_TOKEN_EXPIRATION))
 			.setIssuer("InventoryFlow")
 			.setAudience("InventoryFlow-users")
-			.sign(REFRESH_TOKEN_KEY);
+			.sign(getRefreshTokenKey());
 
 		return jwt;
 	} catch (error) {
@@ -99,7 +100,7 @@ export function generateRefreshToken(userId: string) {
  */
 export async function verifyAccessToken(token: string) {
 	try {
-		const { payload } = await jwtVerify(token, ACCESS_TOKEN_KEY, {
+		const { payload } = await jwtVerify(token, getAccessTokenKey(), {
 			audience: "InventoryFlow-users",
 			issuer: "InventoryFlow",
 		});
@@ -113,7 +114,7 @@ export async function verifyAccessToken(token: string) {
 			exp: payload.exp,
 			iat: payload.iat,
 			role: payload.role as string,
-			userId: payload.userId as string
+			userId: payload.userId as string,
 		};
 	} catch (error) {
 		if (error instanceof Error) {
@@ -139,7 +140,7 @@ export async function verifyAccessToken(token: string) {
  */
 export async function verifyRefreshToken(token: string) {
 	try {
-		const { payload } = await jwtVerify(token, REFRESH_TOKEN_KEY, {
+		const { payload } = await jwtVerify(token, getRefreshTokenKey(), {
 			audience: "InventoryFlow-users",
 			issuer: "InventoryFlow",
 		});
@@ -166,6 +167,17 @@ export async function verifyRefreshToken(token: string) {
 		}
 		throw new UnauthorizedError("Invalid refresh token");
 	}
+}
+
+// Create keys at call-time so tests can mutate process.env during execution.
+function getAccessTokenKey() {
+	const secret = process.env.JWT_ACCESS_SECRET ?? env.JWT_ACCESS_SECRET;
+	return createSecretKey(Buffer.from(secret, "utf-8"));
+}
+
+function getRefreshTokenKey() {
+	const secret = process.env.JWT_REFRESH_SECRET ?? env.JWT_REFRESH_SECRET;
+	return createSecretKey(Buffer.from(secret, "utf-8"));
 }
 
 /**

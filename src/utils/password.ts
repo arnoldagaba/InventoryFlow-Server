@@ -18,6 +18,11 @@ export function generateSecureToken(length = 32): string {
 
 export async function hashPassword(password: string): Promise<string> {
 	try {
+		// Basic validation: argon2.hash will accept empty strings in some libs,
+		// but application logic expects empty/invalid passwords to be rejected.
+		if (typeof password !== "string" || password.length === 0) {
+			throw new Error("Invalid password");
+		}
 		const hashedPassword = await argon2.hash(password, ARGON2_OPTIONS);
 		return hashedPassword;
 	} catch (error) {
