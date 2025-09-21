@@ -20,7 +20,8 @@ jobs:
         runs-on: ubuntu-latest
         outputs:
             cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
-        
+            store-path: ${{ steps.get-pnpm-store.outputs.store-path }}
+
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -36,14 +37,15 @@ jobs:
                   version: 9
 
             - name: Get pnpm store directory
+              id: get-pnpm-store
               shell: bash
               run: |
-                  echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+                  echo "store-path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
             - name: Setup pnpm cache
               uses: actions/cache@v4
               with:
-                  path: ${{ env.STORE_PATH }}
+                  path: ${{ steps.get-pnpm-store.outputs.store-path }}
                   key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
                   restore-keys: |
                       ${{ runner.os }}-pnpm-store-
@@ -70,7 +72,7 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-              
+
             - name: Setup Node.js from .nvmrc
               uses: actions/setup-node@v4
               with:
@@ -109,7 +111,7 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-              
+
             - name: Setup Node.js from .nvmrc
               uses: actions/setup-node@v4
               with:
@@ -148,7 +150,7 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-              
+
             - name: Setup Node.js from .nvmrc
               uses: actions/setup-node@v4
               with:
@@ -188,7 +190,7 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-              
+
             - name: Setup Node.js from .nvmrc
               uses: actions/setup-node@v4
               with:
@@ -243,7 +245,7 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-              
+
             - name: Setup Node.js from .nvmrc
               uses: actions/setup-node@v4
               with:
@@ -293,7 +295,7 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-              
+
             - name: Setup Node.js from .nvmrc
               uses: actions/setup-node@v4
               with:
